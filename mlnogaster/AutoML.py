@@ -11,7 +11,7 @@ import scipy
 import numpy as np
 import copy
 
-from pipeline import GeneticFeatureEngineer,GeneticFeatureSelector,GeneticModelSelector
+from .pipeline import GeneticFeatureEngineer,GeneticFeatureSelector,GeneticModelSelector
 
 class KlusterFoldValidation:
     """
