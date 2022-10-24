@@ -304,7 +304,7 @@ class GeneticFeatureEngineer(TransformerMixin):
       
     programs=np.array([gp for gp in self.engineer._best_programs])
 
-    filtered_fitnesses=[x for x in fitnesses if x>np.percentile(fitnesses,self.percentile)]
+    filtered_fitnesses=[x for x in fitnesses if x>=np.percentile(fitnesses,self.percentile)]
 
     programs_lst+= list(programs[:len(filtered_fitnesses)])
 
