@@ -219,12 +219,14 @@ class GeneticFeatureEngineer(TransformerMixin):
 
   def __init__(self,n_population: int=100,n_generations: int=30,n_tournament: int=100,parsimony: float=0.001,
                metric='pearson',init_p_mutation: float=0.03,n_inductees: int=100, max_n_feats: int=30,
-               init_function_set: Iterable=None, feature_names: Iterable=None,percentile: int=0,
+               init_function_set: Iterable=None, feature_names: Iterable=None,percentile: int=0,n_jobs: int=1,
               adaptive: bool=False,eras: int=5,generational_improvement: bool=False):
     
     assert np.percentile(np.array([1,2]),percentile)
 
     self.percentile=percentile
+    
+    self.n_jobs=n_jobs
 
     self.adaptive=adaptive
 
@@ -276,7 +278,7 @@ class GeneticFeatureEngineer(TransformerMixin):
 
   def initialize_model(self):
     
-    self.engineer=SymbolicTransformer(population_size=self.n_population,hall_of_fame=self.n_inductees,generations=self.n_generations,
+    self.engineer=SymbolicTransformer(population_size=self.n_population,hall_of_fame=self.n_inductees,generations=self.n_generations,n_jobs=self.n_jobs,
                                     tournament_size=self.n_tournament,const_range=None,function_set=self.function_set,p_crossover=self.p_crossover,
                                     p_hoist_mutation=self.p_hoist,p_point_mutation=self.p_point,p_subtree_mutation=self.p_sub,parsimony_coefficient=self.parsimony,
                                     feature_names=self.feature_names,metric=self.metric,warm_start=False,random_state=69,n_components=self.max_n_feats)
