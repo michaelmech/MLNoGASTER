@@ -4,6 +4,7 @@ import pandas as pd
 import copy
 import numbers
 import datetime 
+import editdistance
 
 from tpot import TPOTClassifier,TPOTRegressor
 
