@@ -6,11 +6,13 @@ import numbers
 import datetime 
 import editdistance
 
+
 from tpot import TPOTClassifier,TPOTRegressor
 
 from sklearn.model_selection import ShuffleSplit
 from sklearn.metrics import make_scorer,mean_squared_error
 from sklearn.base import RegressorMixin,ClassifierMixin,TransformerMixin,check_array
+from sklearn.neighbors import NearestNeighbors
 
 from gplearn.genetic import SymbolicTransformer
 from gplearn.functions import make_function
