@@ -4,3 +4,4 @@ dask_ml
 distributed
 pygad
 sklego
+editdistance
