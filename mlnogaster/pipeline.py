@@ -216,25 +216,31 @@ class GeneticModelSelector(RegressorMixin,ClassifierMixin):
 
 
 class GeneticFeatureEngineer(TransformerMixin):
-
-  def __init__(self,n_population: int=100,n_generations: int=30,n_tournament: int=100,parsimony: float=0.001,
-               metric='pearson',init_p_mutation: float=0.03,n_inductees: int=100, max_n_feats: int=30,
-               init_function_set: Iterable=None, feature_names: Iterable=None,percentile: int=0,n_jobs: int=1,
-              adaptive: bool=False,eras: int=5,generational_improvement: bool=False):
+ 
+  def __init__(self,n_population: int=100,n_generations: int=30,n_participants: int=100,parsimony: float=0.001,
+               metric='pearson',init_p_mutation: float=0.03,n_inductees: int=100, max_n_feats: int=30,superficiality: float=0.001,
+               operations: Iterable=None, feat_names: Iterable=None,percentile: int=0,fitness_sharing: bool=False,
+              adaptive: bool=False,n_eras: int=5,generational_improvement: bool=False,n_jobs: int=1,generosity: float=0.001):
     
     assert np.percentile(np.array([1,2]),percentile)
 
+    self.fitness_sharing=fitness_sharing
+
+    self.generosity=generosity
+
+    self.superficiality=superficiality
+
     self.percentile=percentile
     
+    self.parsimony=parsimony
+
     self.n_jobs=n_jobs
 
     self.adaptive=adaptive
-
+    
     self.pickled=False
   
-    self.metric=metric 
-
-    self.max_n_feats=max_n_feats
+    self.metric=metric
 
     self.n_population=n_population
 
@@ -242,29 +248,27 @@ class GeneticFeatureEngineer(TransformerMixin):
     
     assert self.n_inductees<=self.n_population, 'HOF must be less than or equal to population'
 
-    self.max_n_feats=max_n_feats
-
-    assert self.max_n_feats <= self.n_inductees, 'number of features must be less than or equal to HOF'
-
     self.n_generations=n_generations
 
-    self.n_tournament=n_tournament
+    self.n_participants=n_participants
 
-    assert self.n_tournament<=self.n_population, 'tournament size must be less than or equal to population'
+    assert self.n_participants<=self.n_population, 'tournament size must be less than or equal to population'
+
+    self.n_eras=n_eras
+
+    self.max_n_feats=max_n_feats
+
+    assert self.max_n_feats <= self.n_eras*self.n_generations*self.n_population, 'max # of features must be less than or equal to {calc}'.format(calc=self.n_eras*self.n_generations*self.n_population)
 
     self.init_p_mutations(init_p_mutation)
     
     assert (self.p_crossover+self.p_mutation)==1, 'rates must sum to 1'
 
-    self.function_set=init_function_set if init_function_set else ['add','sub','mul','sqrt','abs','neg','inv']
+    self.operations=operations if operations else ['add','sub','mul','sqrt','abs','neg','inv']
     
-    self.feature_names=feature_names
+    self.feat_names=feat_names
 
-    self.generational_improvement=generational_improvement 
-
-    self.parsimony=parsimony
-
-    self.eras=eras
+    self.generational_improvement=generational_improvement
 
     self.fitted=False
 
@@ -276,15 +280,49 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     self.codex=pd.DataFrame()
 
+    self.mapper=None
+
+    self.history=[]
+
   def initialize_model(self):
     
-    self.engineer=SymbolicTransformer(population_size=self.n_population,hall_of_fame=self.n_inductees,generations=self.n_generations,n_jobs=self.n_jobs,
-                                    tournament_size=self.n_tournament,const_range=None,function_set=self.function_set,p_crossover=self.p_crossover,
-                                    p_hoist_mutation=self.p_hoist,p_point_mutation=self.p_point,p_subtree_mutation=self.p_sub,parsimony_coefficient=self.parsimony,
-                                    feature_names=self.feature_names,metric=self.metric,warm_start=False,random_state=69,n_components=self.max_n_feats)
+    self.engineer=SymbolicTransformer(population_size=self.n_population,hall_of_fame=self.n_inductees,generations=self.n_generations,parsimony_coefficient=self.parsimony,
+                                    tournament_size=self.n_participants,const_range=None,function_set=self.operations,p_crossover=self.p_crossover,
+                                    p_hoist_mutation=self.p_hoist,p_point_mutation=self.p_point,p_subtree_mutation=self.p_sub,n_jobs=self.n_jobs,n_components=self.n_inductees,
+                                    feature_names=self.feat_names,metric=self.metric,warm_start=False)
+
     return self.engineer
+
+  def calc_shared_fitness(self,fitness):
+
+    if hasattr(self,'programs_lst') and self.programs_lst:
+
+      fitnesses=np.array([gp.fitness_ for gp in self.programs_lst]).reshape(-1,1)  
+
+      neigh=NearestNeighbors(n_neighbors=10,n_jobs=-1,metric=lambda x,y: scipy.spatial.distance.euclidean(x,y))
+
+      neigh.fit(fitnesses)
+
+      p_fitness=np.mean(neigh.kneighbors(np.array(fitness).reshape(-1,1))[0])      
+
+      return self.generosity*p_fitness+fitness if not self.minimize else  -self.generosity*p_fitness+fitness
+      
+    else:
+      return fitness
   
-  def fit_update(self,X,y,programs_lst,era=None):
+  def map_fitness_sharing(self,func):
+
+    def new_func(y_true,y_pred,w):
+
+      raw_fitness=func(self,y_true,y_pred)
+
+      return self.calc_shared_fitness(raw_fitness)
+
+    return new_func
+
+  def fit_update(self,X,y,era=None):
+
+   # era=None
 
     if not era:
       self.engineer.warm_start= False
@@ -301,16 +339,20 @@ class GeneticFeatureEngineer(TransformerMixin):
     new=pd.DataFrame(new,columns=column_names).T.drop_duplicates().T
 
     self.codex=pd.concat([self.codex,new],axis=1).T.drop_duplicates().T
-
-    fitnesses=np.array([fx.fitness_ for fx in self.engineer])
+    
+    fitnesses=np.array([fx.fitness_ for fx in self.engineer]).reshape(-1,1)
       
     programs=np.array([gp for gp in self.engineer._best_programs])
 
-    filtered_fitnesses=[x for x in fitnesses if x>=np.percentile(fitnesses,self.percentile)]
+    filtered_fitnesses=[x for x in fitnesses if x<=np.percentile(fitnesses,self.percentile)] if self.minimize else [x for x in fitnesses if x>=np.percentile(fitnesses,self.percentile)] 
 
-    programs_lst+= list(programs[:len(filtered_fitnesses)])
+    self.programs_lst+= list(programs[:len(filtered_fitnesses)])
 
-    return programs_lst,fitnesses
+    self.fitness_lst+=filtered_fitnesses
+
+    assert len(self.programs_lst)==len(self.fitness_lst)
+    
+    return self.programs_lst,fitnesses
   
   def init_p_mutations(self,p_mutation: float=0.03):
 
@@ -325,6 +367,32 @@ class GeneticFeatureEngineer(TransformerMixin):
     self.p_point=self.p_mutation/3
 
     self.p_crossover=1-self.p_mutation
+  
+  def encode_genes(self,program,X):
+
+    str_program=[x.name if not isinstance(x,int) else x for x in program]
+
+    return np.array([self.mapper[decoding] for decoding in str_program])
+  
+
+  def calc_diversity(self,X):
+
+    unpadded_genes=np.array([self.encode_genes(x.program,X) for x in self.programs_lst])
+
+    max_length = max([len(row) for row in unpadded_genes])
+    self.encoded_genes = np.array([np.pad(row, (0, max_length-len(row))) for row in unpadded_genes])
+  
+    self.g_neigh.fit(self.encoded_genes)
+
+    g_diversity=np.mean(self.g_neigh.kneighbors(self.encoded_genes)[0])
+
+    fitnesses=np.array(self.fitness_lst).reshape(-1,1)  
+
+    self.p_neigh.fit(fitnesses)
+   
+    p_diversity=np.mean(self.p_neigh.kneighbors(fitnesses)[0])
+
+    return self.superficiality*g_diversity+p_diversity
 
   def fitness_importances(self,program_lst):
 
@@ -346,13 +414,24 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     imps = imps[~imps.index.duplicated(keep='first')]
 
-    imps=imps.sort_values('fitnesses',ascending=not self.minimize)[:self.max_n_feats]
-
-    imps=imps.sort_values('fitnesses',ascending=False)[:self.max_n_feats]
+    imps=imps.sort_values('fitnesses',ascending=self.minimize)[:self.max_n_feats]
 
     self.leaderboard=imps.drop('programs',axis=1).copy()  
 
     self.engineer._best_programs=list(imps['programs'].values)
+  
+  def define_mapper(self,X):
+
+    self.mapper={x:x for x in range(X.shape[-1])}
+
+    operation_str=[x.name for x in self.operations if not isinstance(x,str)]+[x for x in self.operations if isinstance(x,str)]
+
+    counter=0
+
+    for operation in operation_str:
+
+      self.mapper[operation]=counter+X.shape[-1]
+      counter+=1
 
   def fit_create_function(program):
 
@@ -404,47 +483,60 @@ class GeneticFeatureEngineer(TransformerMixin):
     self.fitted=False
 
     self.codex=pd.DataFrame(X.copy())
+ 
+    self.define_mapper(X)
   
-    programs_lst=[]
+    self.programs_lst=[]
 
-    new_ops=[]
+    self.fitness_lst=[]
 
-    programs_lst,fitnesses=self.fit_update(X,y,programs_lst)
-
-    if self.generational_improvement:
-      new_ops+=[self.fit_create_function(program) for program in programs_lst]
+    programs_lst,fitnesses=self.fit_update(X,y)
 
     if self.generational_improvement:
-      new_ops=[self.fit_create_function(program) for program in programs_lst]
+      new_ops=[self.fit_create_function(program) for program in self.programs_lst]
     
     if self.adaptive:
 
-      std_lst=[]
+      self.g_neigh=NearestNeighbors(n_neighbors=10,n_jobs=-1,metric=lambda x,y: editdistance.eval(x,y))
+  
+      self.p_neigh=NearestNeighbors(n_neighbors=10,n_jobs=-1,metric=lambda x,y: scipy.spatial.distance.euclidean(x,y))
 
-      std_lst.append(np.nanstd(fitnesses))
+      max_participants=self.n_population
 
-    for era in range(self.eras-1):
+      self.diversity_lst=[]
+      
+      diversity=self.calc_diversity(X)
+
+      self.diversity_lst.append(diversity)
+    
+    self.history.append(self.engineer.run_details_)
+
+    for era in range(self.n_eras-1):
+
+      self.era=era
   
       self.initialize_model()
       
-      programs_lst,fitnesses=self.fit_update(X,y,programs_lst,era)
+      programs_lst,fitnesses=self.fit_update(X,y,era)
 
       if self.generational_improvement:
-        new_ops+=[self.fit_create_function(program) for program in programs_lst]
+        new_ops+=[self.fit_create_function(program) for program in self.programs_lst]
 
       if self.adaptive:
 
-        fitnesses=[gp.fitness() for gp in self.engineer._programs[-1]]
+        diversity=self.calc_diversity(X)
+
+        self.diversity_lst.append(diversity)
+
+        self.p_mutation=1-self.diversity_lst[-1]/np.max(self.diversity_lst)
+
+        self.n_participants=round(self.diversity_lst[-1]/np.max(self.diversity_lst)*max_participants)
         
-        std_lst.append(np.nanstd(fitnesses))
-
-        self.p_mutation=1-std_lst[-1]/np.max(std_lst)
-
         self.init_p_mutations(None)
       
-    programs_lst=np.array(programs_lst)
-    
-    self.fitness_importances(programs_lst)
+        self.history.append(self.engineer.run_details_)
+      
+    self.fitness_importances(np.array(self.programs_lst))
 
     self.fitted=True
 
@@ -468,6 +560,10 @@ class GeneticFeatureEngineer(TransformerMixin):
     def new_func(y_true,y_pred,w):
 
       return func(self,y_true,y_pred)
+
+    if self.fitness_sharing:
+
+      new_func=self.map_fitness_sharing(func)
     
     self.engineer.metric=make_fitness(function=new_func,greater_is_better=not self.minimize)
 
@@ -480,9 +576,9 @@ class GeneticFeatureEngineer(TransformerMixin):
     custom_func=make_function(function=func,
                               name=func_name,
                               arity=func.__code__.co_argcount)
-                      
+
     self.engineer.function_set+=(custom_func,)
-  
+
   def transform(self,X,y=None):
 
     assert self.fitted, 'engineer needs to be fitted'
