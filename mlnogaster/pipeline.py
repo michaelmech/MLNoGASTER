@@ -5,6 +5,7 @@ import copy
 import numbers
 import datetime 
 import editdistance
+import scipy
 
 
 from tpot import TPOTClassifier,TPOTRegressor
