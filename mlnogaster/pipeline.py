@@ -221,7 +221,7 @@ class GeneticModelSelector(RegressorMixin,ClassifierMixin):
 
 class GeneticFeatureEngineer(TransformerMixin):
  
-  def __init__(self,n_population: int=100,n_generations: int=30,n_participants: int=100,parsimony: float=0.001,
+  def __init__(self,n_population: int=100,n_generations: int=30,n_participants: int=100,parsimony: float=0.001,random_state: None,
                metric='pearson',init_p_mutation: float=0.03,n_inductees: int=100, max_n_feats: int=30,superficiality: float=0.001,
                operations: Iterable=None, feat_names: Iterable=None,percentile: int=0,fitness_sharing: bool=False,
               adaptive: bool=False,n_eras: int=5,generational_improvement: bool=False,n_jobs: int=1,generosity: float=0.001):
@@ -239,6 +239,8 @@ class GeneticFeatureEngineer(TransformerMixin):
     self.parsimony=parsimony
 
     self.n_jobs=n_jobs
+    
+    self.random_state=random_state
 
     self.adaptive=adaptive
     
@@ -292,8 +294,8 @@ class GeneticFeatureEngineer(TransformerMixin):
     
     self.engineer=SymbolicTransformer(population_size=self.n_population,hall_of_fame=self.n_inductees,generations=self.n_generations,parsimony_coefficient=self.parsimony,
                                     tournament_size=self.n_participants,const_range=None,function_set=self.operations,p_crossover=self.p_crossover,
-                                    p_hoist_mutation=self.p_hoist,p_point_mutation=self.p_point,p_subtree_mutation=self.p_sub,n_jobs=self.n_jobs,n_components=self.n_inductees,
-                                    feature_names=self.feat_names,metric=self.metric,warm_start=False)
+                                    p_hoist_mutation=self.p_hoist,p_point_mutation=self.p_point,p_subtree_mutation=self.p_sub,n_jobs=self.n_jobs,
+                                    feature_names=self.feat_names,metric=self.metric,warm_start=False,random_state=self.random_state,n_components=self.n_inductees)
 
     return self.engineer
 
