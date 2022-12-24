@@ -221,7 +221,7 @@ class GeneticModelSelector(RegressorMixin,ClassifierMixin):
 
 class GeneticFeatureEngineer(TransformerMixin):
  
-  def __init__(self,n_population: int=100,n_generations: int=30,n_participants: int=100,parsimony: float=0.001,random_state: None,
+  def __init__(self,n_population: int=100,n_generations: int=30,n_participants: int=100,parsimony: float=0.001,random_state= None,
                metric='pearson',init_p_mutation: float=0.03,n_inductees: int=100, max_n_feats: int=30,superficiality: float=0.001,
                operations: Iterable=None, feat_names: Iterable=None,percentile: int=0,fitness_sharing: bool=False,
               adaptive: bool=False,n_eras: int=5,generational_improvement: bool=False,n_jobs: int=1,generosity: float=0.001):
