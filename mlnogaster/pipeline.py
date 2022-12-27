@@ -340,15 +340,19 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     new=self.engineer.transform(X)
 
-    column_names=[str(name) for name in self.engineer]
+    dup_idxs=pd.DataFrame(new).T.duplicated()
 
-    new=pd.DataFrame(new,columns=column_names).T.drop_duplicates().T
+    programs=np.array([gp for gp in self.engineer._best_programs])
+
+    programs=np.delete(programs,np.where(dup_idxs)[0])
+
+    column_names=[str(name) for name in programs]
+
+    new=pd.DataFrame(new[:,~dup_idxs],columns=column_names)
 
     self.codex=pd.concat([self.codex,new],axis=1).T.drop_duplicates().T
     
-    fitnesses=np.array([fx.fitness_ for fx in self.engineer]).reshape(-1,1)
-      
-    programs=np.array([gp for gp in self.engineer._best_programs])
+    fitnesses=np.array([fx.fitness_ for fx in programs]).reshape(-1,1)
 
     filtered_fitnesses=[x for x in fitnesses if x<=np.percentile(fitnesses,self.percentile)] if self.minimize else [x for x in fitnesses if x>=np.percentile(fitnesses,self.percentile)] 
 
