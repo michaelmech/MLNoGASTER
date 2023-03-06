@@ -21,6 +21,11 @@ def JWdistance(x,y):
 def pairwise_emd(X):
   return pairwise_distances(X,metric=numba_emd)
 
+def alt_cdf(y):
+    uniques, counts = np.unique(y, return_counts=True)
+    value_counts = np.cumsum(counts) / np.sum(counts)
+    return value_counts[np.searchsorted(uniques, y)]
+
 @numba.njit(fastmath=True)
 def numba_emd(u_values, v_values):
 
