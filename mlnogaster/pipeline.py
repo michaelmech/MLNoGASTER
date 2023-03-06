@@ -221,6 +221,8 @@ class GeneticModelSelector(RegressorMixin,ClassifierMixin):
 
     return self.fit(x_train,y_train,x_test,y_test).predict(x_test)
 
+from sklearn.cluster import KMeans
+
 class GeneticFeatureEngineer(TransformerMixin):
      
   def __init__(self,n_population: int=100,n_generations: int=30,n_participants: int=100,parsimony: float=0.001,random_state= None,n_seasons: int=0,impostor_gene: bool=False,
@@ -385,10 +387,10 @@ class GeneticFeatureEngineer(TransformerMixin):
     
     if self.n_seasons > 1:
       season_sign = 1 if (self.era % 2 == 0) else -1
-          
+
       scaler=StandardScaler()
       clusterer = KMeans(n_clusters=self.n_seasons)
-
+      
       scaled_features =np.apply_along_axis(alt_cdf,0,np.array([program.execute(X) for program in programs]).T)
       scaled_features = scaler.fit_transform(scaled_features)
 
@@ -508,21 +510,19 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     return objs
 
-  
   def encode_genes(self,programs):
     
     unpadded_genes=np.array(list({self.encode_gene(x.program).tostring(): self.encode_gene(x.program) for x in programs}.values()))
     max_length = max([len(row) for row in unpadded_genes])
-    encoded_genes = np.array([np.pad(row, (0, max_length-len(row))) for row in unpadded_genes])
+    encoded_genes = np.array([np.pad(row, (0, max_length-len(row)),constant_values=-999) for row in unpadded_genes])
       
     return encoded_genes
-  
   
   def gene_assignments(self, programs):
     
     encoded_genes = self.encode_genes(programs)
     operation_encodings = [self.mapper[x] for x in self.mapper if isinstance(x, str)]
-    encoded_genes[~np.isin(encoded_genes, operation_encodings)] = 0
+    encoded_genes[~np.isin(encoded_genes, operation_encodings)] = -999
     fitnesses=np.array([gx.fitness_ for gx in programs])
 
     if self.impostor_gene:
@@ -553,25 +553,26 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     return programs
   
-  
   def gene_extinction(self):
-
+    purge_lst=[]
     if self.extinction_counter == self.n_stagnation:
-        
+
         gene_counts = self.engineer.run_details_['gene_counts']
-        purge_idx = gene_counts.argmax()
+        purge_idx = gene_counts.drop(-999).argmax()
 
         if self.str_operations[purge_idx] != 'impostor_operation':
             if purge_idx < len(self.operations):
                 del self.operations[purge_idx]
                 print(f'purging {self.reverse_mapper[purge_idx]}')
+                purge_lst.append(self.reverse_mapper[purge_idx])
+                
             else:
                 # index is out of bounds, do nothing
                 pass
 
         self.extinction_counter = 0
+    self.engineer.run_details_['purged_genes']=purge_lst
 
-  
   def calc_diversity(self,X):
     self.encoded_genes = self.encode_genes(self.codex_programs)
     self.g_neigh=NearestNeighbors(n_neighbors=min(5,len(self.encoded_genes)),n_jobs=-1,metric=lambda x,y: JWdistance(x,y))
@@ -601,10 +602,12 @@ class GeneticFeatureEngineer(TransformerMixin):
   def define_mapper(self, X):
     n_features = X.shape[-1]
     self.mapper = {x: x for x in range(n_features)}
+    self.mapper[-999]=-999
     self.str_operations = [x if isinstance(x,str) else x.name for x in self.operations]
     for i, operation in enumerate(self.str_operations, start=n_features):
         self.mapper[operation] = i
     self.reverse_mapper = {y: x for x, y in self.mapper.items()}
+    self.reverse_mapper[-999]=-999
 
   def fit_create_function(program):
 
@@ -634,7 +637,6 @@ class GeneticFeatureEngineer(TransformerMixin):
     to_pickle.pickled=True
 
     return to_pickle
-  
   
   def archive(self):
 
