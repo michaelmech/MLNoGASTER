@@ -354,7 +354,6 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     return new_func
   
-  
   def map_birthdates(self,programs):
     for program in programs:
       program.birthdate=self.era*self.engineer.generations
@@ -384,13 +383,13 @@ class GeneticFeatureEngineer(TransformerMixin):
     new = pd.DataFrame(new[:, ~dup_idxs], columns=column_names)
     self.codex = pd.concat([self.codex, new], axis=1).T.drop_duplicates().T if not self.batch else new.copy()
     
-    if self.n_seasons > 0:
+    if self.n_seasons > 1:
       season_sign = 1 if (self.era % 2 == 0) else -1
           
       scaler=StandardScaler()
       clusterer = KMeans(n_clusters=self.n_seasons)
 
-      scaled_features = np.array([program.execute(X) for program in programs]).T.apply(alt_cdf)
+      scaled_features =np.apply_along_axis(alt_cdf,0,np.array([program.execute(X) for program in programs]).T)
       scaled_features = scaler.fit_transform(scaled_features)
 
       nans_idx = np.isnan(scaled_features).any(axis=0)
@@ -415,7 +414,7 @@ class GeneticFeatureEngineer(TransformerMixin):
     
     programs=list(programs)
   
-    if self.n_seasons > 0 or self.aging:
+    if self.n_seasons > 1 or self.aging:
         for program in programs + self.codex_programs:
             program.fitness_ = program.fitness()
 
