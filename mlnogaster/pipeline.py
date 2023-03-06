@@ -12,7 +12,8 @@ from sklearn.model_selection import ShuffleSplit
 from sklearn.metrics import make_scorer,mean_squared_error
 from sklearn.base import RegressorMixin,ClassifierMixin,TransformerMixin,check_array
 from sklearn.neighbors import NearestNeighbors
-from sklearn.cluster import AgglomerativeClustering
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 from gplearn.genetic import SymbolicTransformer
 from gplearn.functions import make_function
@@ -22,7 +23,7 @@ import pygad
 
 from sklego.base import Clusterer
 
-from .utils import inject_repr,prevFibonacci,nextFibonacci,JWdistance,pairwise_emd
+from .utils import inject_repr,prevFibonacci,nextFibonacci,JWdistance,alt_cdf
 
 class GeneticModelSelector(RegressorMixin,ClassifierMixin):
     
@@ -382,10 +383,11 @@ class GeneticFeatureEngineer(TransformerMixin):
     
     if self.n_seasons > 0:
       season_sign = 1 if (self.era % 2 == 0) else -1
+          
+      scaler=StandardScaler()
+      clusterer = KMeans(n_clusters=self.n_seasons)
 
-      clusterer = AgglomerativeClustering(n_clusters=self.n_seasons, linkage='average', metric=pairwise_emd)
-
-      scaled_features = np.array([program.execute(X) for program in programs]).T
+      scaled_features = np.array([program.execute(X) for program in programs]).T.apply(alt_cdf)
       scaled_features = scaler.fit_transform(scaled_features)
 
       nans_idx = np.isnan(scaled_features).any(axis=0)
