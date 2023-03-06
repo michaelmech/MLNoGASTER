@@ -223,6 +223,8 @@ class GeneticModelSelector(RegressorMixin,ClassifierMixin):
 
 from sklearn.cluster import KMeans
 
+from sklearn.cluster import KMeans
+
 class GeneticFeatureEngineer(TransformerMixin):
      
   def __init__(self,n_population: int=100,n_generations: int=30,n_participants: int=100,parsimony: float=0.001,random_state= None,n_seasons: int=0,impostor_gene: bool=False,
@@ -332,7 +334,6 @@ class GeneticFeatureEngineer(TransformerMixin):
                                     feature_names=self.feat_names,metric=self.metric,warm_start=False,random_state=self.random_state+self.random_counter,n_components=self.n_inductees)
 
     self.random_counter+=1
-
     return self.engineer
 
   def calc_shared_fitness(self, fitness):
@@ -438,7 +439,7 @@ class GeneticFeatureEngineer(TransformerMixin):
         penalty = self.parsimony * program.length_ *sign
         program.fitness_=program.fitness_-penalty
       
-    progams=self.gene_assignments(programs)
+    programs=self.gene_assignments(programs)
     
     if self.extinction and self.era!=0:
       stagnation_condition=self.engineer.run_details_['gene_scores'].max()<self.history[-1]['gene_scores'].max()
@@ -458,7 +459,8 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     codex_strs = [str(program) for program in self.codex_programs]
     program_strs = [str(program) for program in programs]
- 
+    
+    
     return self.codex_programs
   
   def init_p_mutations(self,p_mutation: float=0.03):
@@ -468,11 +470,8 @@ class GeneticFeatureEngineer(TransformerMixin):
       self.p_mutation=p_mutation
   
     self.p_hoist=self.p_mutation/3
-
     self.p_sub=self.p_mutation/3
-
     self.p_point=self.p_mutation/3
-
     self.p_crossover=1-self.p_mutation
   
   def encode_gene(self,program):
@@ -500,9 +499,9 @@ class GeneticFeatureEngineer(TransformerMixin):
         crowding_distances[sorted_indices[-1]] = np.inf
 
         for i in range(1, n_individuals - 1):
-
             fitness_range = scores[objective, sorted_indices[i+1]] - scores[objective, sorted_indices[i-1]]
             crowding_distances[sorted_indices[i]] += fitness_range
+    
     new_scores = 1 / (crowding_distances + 1)
 
     for i in range(n_individuals):
@@ -529,17 +528,16 @@ class GeneticFeatureEngineer(TransformerMixin):
 
         fitnesses -= self.impostor_penalty
 
-        impostor_idx = (encoded_genes < 0).any(axis=1)
+        impostor_idx = (encoded_genes ==-1).any(axis=1)
         ref_fitness = fitnesses[impostor_idx].mean()
-        mask = fitnesses > ref_fitness
+        mask = (fitnesses > ref_fitness) & (~impostor_idx)
 
         programs = np.array(programs)[mask]
         fitnesses = fitnesses[mask]
         encoded_genes = encoded_genes[mask]
 
-        if len(programs) == 0:
-            print('extinct')
-
+        assert len(programs) != 0, 'Average impostor gene fitness too high'
+          
     repeated = np.repeat(fitnesses, repeats=encoded_genes.shape[-1], axis=0).reshape(encoded_genes.shape)
 
     gene_scores = pd.DataFrame({'fitness': repeated.ravel(), 'gene': encoded_genes.ravel()}).groupby('gene').mean()['fitness']
@@ -551,7 +549,7 @@ class GeneticFeatureEngineer(TransformerMixin):
     self.engineer.run_details_['gene_scores'] = gene_scores
     self.engineer.run_details_['gene_counts'] = gene_counts
 
-    return programs
+    return list(programs)
   
   def gene_extinction(self):
     purge_lst=[]
@@ -563,8 +561,8 @@ class GeneticFeatureEngineer(TransformerMixin):
         if self.str_operations[purge_idx] != 'impostor_operation':
             if purge_idx < len(self.operations):
                 del self.operations[purge_idx]
-                print(f'purging {self.reverse_mapper[purge_idx]}')
-                purge_lst.append(self.reverse_mapper[purge_idx])
+                print(f'purging {self.str_operations[purge_idx]}')
+                purge_lst.append(self.str_operations[purge_idx])
                 
             else:
                 # index is out of bounds, do nothing
@@ -655,21 +653,10 @@ class GeneticFeatureEngineer(TransformerMixin):
     self.define_mapper(X)
     self.codex_programs = []
     if self.impostor_gene:
-        self.custom_operation(lambda x1, x2, x3: np.random.rand(*x1.shape), 'impostor_operation3')
-        self.custom_operation(lambda x1,x2: np.random.rand(*x1.shape), 'impostor_operation2')
-        self.custom_operation(lambda x1,x2,x3,x4: np.random.rand(*x1.shape), 'impostor_operation4')
-      
-        self.mapper['impostor_operation2'] = -2
-        self.reverse_mapper[-2] = 'impostor_operation2'
-        self.str_operations.append('impostor_operation2')
-
-        self.mapper['impostor_operation3'] = -3
-        self.reverse_mapper[-3] = 'impostor_operation3'
-        self.str_operations.append('impostor_operation3')
-
-        self.mapper['impostor_operation4'] = -4
-        self.reverse_mapper[-4] = 'impostor_operation4'
-        self.str_operations.append('impostor_operation4')
+        self.custom_operation(lambda x1,x2: np.random.rand(*x1.shape), 'impostor_operation')
+        self.mapper['impostor_operation'] = -1
+        self.reverse_mapper[-1] = 'impostor_operation'
+        self.str_operations.append('impostor_operation')
         
     codex_programs = self.fit_update(X, y)
     if self.adaptive:
