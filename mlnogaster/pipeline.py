@@ -430,7 +430,7 @@ class GeneticFeatureEngineer(TransformerMixin):
         penalty = self.parsimony * program.length_ *sign
         pareto_tuple=(program.raw_fitness_,)
         for pareto_metric in self.pareto_metrics:
-          pareto_tuple+=(pareto_metric(self,y,programs_array[:,idx])-penalty)
+          pareto_tuple+=tuple([pareto_metric(self,y,programs_array[:,idx])-penalty])
         program.pareto_fitnesses=pareto_tuple
       
       programs=self.pareto_front_fitness(programs)
