@@ -649,7 +649,7 @@ class GeneticFeatureEngineer(TransformerMixin):
     y = check_array(y)
     self.era = 0
     self.fitted = False
-    self.codex = pd.DataFrame(X.copy()) if self.codex.empty
+    self.codex = pd.DataFrame(X.copy()) if self.codex.empty else self.codex
     self.define_mapper(X)
     self.codex_programs = []
     if self.impostor_gene:
