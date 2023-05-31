@@ -286,7 +286,7 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     self.max_n_feats=max_n_feats
 
-    assert self.max_n_feats <= self.n_eras*self.n_generations*self.n_population, 'max # of features must be less than or equal to {calc}'.format(calc=self.n_eras*self.n_generations*self.n_population)
+    assert self.max_n_feats <= self.n_eras*self.n_generations*self.n_population, 'max # of features must be less than or equal to eras*generations* population = {calc}'.format(calc=self.n_eras*self.n_generations*self.n_population)
 
     self.init_p_mutations(init_p_mutation)
     
@@ -342,7 +342,7 @@ class GeneticFeatureEngineer(TransformerMixin):
     fitnesses = np.array([gp.fitness_ for gp in self.codex_programs])
     if not fitnesses.size:
         return fitness
-    distances = np.sqrt(np.sum((fitnesses.reshape(-1, 1) - fitness.reshape(1, -1)) ** 2, axis=0))
+    distances = np.sqrt(np.sum((fitnesses.reshape(-1, 1) - fitness) ** 2, axis=0))
     neighbors = distances.argsort()[:min(10, len(fitnesses))]
     p_fitness = np.mean(fitnesses[neighbors])
     return self.sign * (self.generosity * p_fitness) + fitness
