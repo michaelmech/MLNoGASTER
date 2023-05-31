@@ -320,7 +320,7 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     self.reverse_mapper=None
 
-    self.leaderboard=None
+    self.leaderboard=pd.DataFrame()
 
     self.history=[]
 
@@ -591,9 +591,9 @@ class GeneticFeatureEngineer(TransformerMixin):
     imps = pd.DataFrame({'fitnesses': fitnesses[indexer]}, index=[str(program_lst[i]) for i in indexer])
     imps['programs'] = [program_lst[i] for i in indexer]
     imps = imps.drop_duplicates(keep='last')
-    imps = imps.sort_values('fitnesses', ascending=self.minimize)[:self.max_n_feats]
+    imps = imps.sort_values('fitnesses', ascending=self.minimize)
     self.engineer._best_programs = imps['programs'].tolist()
-    self.leaderboard = imps[['fitnesses']].copy()
+    self.leaderboard = pd.concat([self.leaderboard,imps[['fitnesses']].copy()]).sort_values('fitnesses', ascending=self.minimize)
     self.leaderboard.index = [str(program) for program in self.engineer._best_programs]
     self.operations = self.operations_copy if self.extinction else self.operations
   
