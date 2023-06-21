@@ -388,25 +388,25 @@ class GeneticFeatureEngineer(TransformerMixin):
     unique_cols,unique_idxs=np.unique(X,return_index=True,axis=1)
     self.codex=pd.DataFrame(unique_cols,columns=self.codex.columns[unique_idxs])
     
-      if self.n_seasons > 1:
-      season_sign = 1 if (self.era % 2 == 0) else -1
-
-      scaler=StandardScaler()
-      clusterer = KMeans(n_clusters=self.n_seasons)
+    if self.n_seasons > 1:
+    season_sign = 1 if (self.era % 2 == 0) else -1
+    
+    scaler=StandardScaler()
+    clusterer = KMeans(n_clusters=self.n_seasons)
       
-      scaled_features =np.apply_along_axis(alt_cdf,0,np.array([program.execute(X) for program in programs]).T)
-      scaled_features = scaler.fit_transform(scaled_features)
-
-      nans_idx = np.isnan(scaled_features).any(axis=0)
-      infs_idx = np.isinf(scaled_features).any(axis=0)
-
-      programs = programs[~nans_idx & ~infs_idx]
-      scaled_features = scaled_features[:, ~nans_idx & ~infs_idx]
-
-      cluster_idxs = clusterer.fit_predict(scaled_features.T)
-
-      for idx, program in enumerate(programs):
-          program.fitness_ = program.fitness() - self.sign * self.phenology * cluster_idxs[idx] * season_sign
+    scaled_features =np.apply_along_axis(alt_cdf,0,np.array([program.execute(X) for program in programs]).T)
+    scaled_features = scaler.fit_transform(scaled_features)
+    
+    nans_idx = np.isnan(scaled_features).any(axis=0)
+    infs_idx = np.isinf(scaled_features).any(axis=0)
+    
+    programs = programs[~nans_idx & ~infs_idx]
+    scaled_features = scaled_features[:, ~nans_idx & ~infs_idx]
+    
+    cluster_idxs = clusterer.fit_predict(scaled_features.T)
+    
+    for idx, program in enumerate(programs):
+        program.fitness_ = program.fitness() - self.sign * self.phenology * cluster_idxs[idx] * season_sign
 
     if self.aging:
         self.map_birthdates(programs)
