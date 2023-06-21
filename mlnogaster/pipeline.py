@@ -385,7 +385,7 @@ class GeneticFeatureEngineer(TransformerMixin):
     column_names = [str(name) for name in programs]
     new = pd.DataFrame(new[:, ~dup_idxs], columns=column_names)
     self.codex = pd.concat([self.codex, new], axis=1) if not self.batch else new.copy()
-    unique_cols,unique_idxs=np.unique(X,return_index=True,axis=1)
+    unique_cols,unique_idxs=np.unique(self.codex,return_index=True,axis=1)
     self.codex=pd.DataFrame(unique_cols,columns=self.codex.columns[unique_idxs])
     
     if self.n_seasons > 1:
