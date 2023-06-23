@@ -379,11 +379,13 @@ class GeneticFeatureEngineer(TransformerMixin):
     if verbose:
         t2 = datetime.datetime.now()
     new = self.engineer.transform(X)
-    dup_idxs = pd.DataFrame(new).T.duplicated()
+    unique_cols,unique_idxs=np.unique(new,return_index=True,axis=1)
     programs = np.array(self.engineer._best_programs)
-    programs = programs[~dup_idxs]
+    programs = programs[unique_idxs]
     column_names = [str(name) for name in programs]
-    new = pd.DataFrame(new[:, ~dup_idxs], columns=column_names)
+    new = pd.DataFrame(unique_cols, columns=column_names)
+    
+      
     self.codex = pd.concat([self.codex, new], axis=1) if not self.batch else new.copy()
     unique_cols,unique_idxs=np.unique(self.codex,return_index=True,axis=1)
     self.codex=pd.DataFrame(unique_cols,columns=self.codex.columns[unique_idxs])
