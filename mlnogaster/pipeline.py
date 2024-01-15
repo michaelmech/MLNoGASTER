@@ -748,10 +748,10 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     self.pareto_metrics.append(func)
 
-  def custom_operation(self,func,func_name):
+  def custom_operation(self,func,func_name,arity):
     custom_func=make_function(function=func,
                               name=func_name,
-                              arity=func.__code__.co_argcount)
+                              arity=arity)
 
     self.operations_copy+=(custom_func,)
     self.engineer.function_set+=(custom_func,)
