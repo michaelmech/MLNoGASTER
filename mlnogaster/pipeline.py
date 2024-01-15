@@ -590,9 +590,11 @@ class GeneticFeatureEngineer(TransformerMixin):
 
         if self.str_operations[purge_idx] != 'impostor_operation':
             if purge_idx < len(self.operations):
-                del self.operations[purge_idx]
-                print(f'purging {self.str_operations[purge_idx]}')
+              
+                print(f'purging {self.str_operations[purge_idx]}')    ###########CHANGE#############
                 purge_lst.append(self.str_operations[purge_idx])
+                del self.operations[purge_idx]
+                del self.str_operations[purge_idx]
 
             else:
                 # index is out of bounds, do nothing
