@@ -225,21 +225,36 @@ from sklearn.cluster import KMeans
 
 from sklearn.cluster import KMeans
 
+from collections import OrderedDict
+
 class GeneticFeatureEngineer(TransformerMixin):
   def flatten_list(matrix):
     flat_list = []
     for row in matrix:
       flat_list.extend(row)
     return flat_list
+  
+  def remove_from_list(my_list, index):
+    if 0 <= index < len(my_list):
+        # Check if the index is within the valid range
+        removed_element = my_list.pop(index)
+        return removed_element, my_list
+    else:
+        return None, my_list
 
   def __init__(self,n_population: int=100,n_generations: int=30,n_participants: int=100,parsimony: float=0.001,random_state= None,n_seasons: int=0,impostor_gene: bool=False,
                metric='pearson',init_p_mutation: float=0.03,n_inductees: int=100, max_n_feats: int=30,superficiality: float=0.001,phenology: float=0.001,impostor_penalty:float=0.001,
                operations: Iterable=None, feat_names: Iterable=None,percentile: int=0,fitness_sharing: bool=False,mortality:float=0.001,batch:bool=False,lightweight: bool= False,
-              adaptive: bool=False,n_eras: int=5,n_jobs: int=1,generosity: float=0.001,aging: bool=False,extinction: bool=False,n_stagnation: int=1):
+              adaptive: bool=False,n_eras: int=5,n_jobs: int=1,generosity: float=0.001,aging: bool=False,extinction: bool=False,n_stagnation: int=1,purge_feats: bool=False,
+              prune_genes=False): 
 
     assert np.percentile(np.array([1,2]),percentile)
 
     self.fitness_sharing=fitness_sharing
+
+    self.prune_genes=prune_genes
+
+    self.feat_idxs= [] if purge_feats else None
 
     self.impostor_gene=impostor_gene
 
@@ -302,7 +317,8 @@ class GeneticFeatureEngineer(TransformerMixin):
 
     self.operations_copy=self.operations.copy()
 
-    self.feat_names=feat_names
+    self.feat_names=list(feat_names)
+    self.orig_feat_names=self.feat_names.copy()
 
     self.fitted=False
 
@@ -339,7 +355,7 @@ class GeneticFeatureEngineer(TransformerMixin):
     self.engineer=SymbolicTransformer(population_size=self.n_population,hall_of_fame=self.n_inductees,generations=self.n_generations,parsimony_coefficient=self.parsimony,
                                     tournament_size=self.n_participants,const_range=None,function_set=self.operations,p_crossover=self.p_crossover,
                                     p_hoist_mutation=self.p_hoist,p_point_mutation=self.p_point,p_subtree_mutation=self.p_sub,n_jobs=self.n_jobs,
-                                    feature_names=self.feat_names,metric=self.metric,warm_start=False,random_state=self.random_state+self.random_counter,n_components=self.n_inductees)
+                                    feature_names=self.feat_names.copy(),metric=self.metric,warm_start=False,random_state=self.random_state+self.random_counter,n_components=self.n_inductees)
 
     self.random_counter+=1
     return self.engineer
@@ -408,6 +424,12 @@ class GeneticFeatureEngineer(TransformerMixin):
     programs = np.array(self.engineer._best_programs)
     programs = programs[unique_idxs]
 
+    if self.prune_genes:
+      lst=[]
+      for program in programs:
+        programs=lst.append(self.prune(program,X,y))
+      programs=np.array(lst)
+
     if not self.lightweight:
 
       column_names = [str(name) for name in programs]
@@ -473,10 +495,11 @@ class GeneticFeatureEngineer(TransformerMixin):
     programs=self.gene_assignments(programs)
 
     if self.extinction and self.era!=0:
+
       stagnation_condition=self.engineer.run_details_['gene_scores'].max()<self.history[-1]['gene_scores'].max()
 
       self.extinction_counter+= -1 if not stagnation_condition else int(stagnation_condition)
-      self.gene_extinction()
+      X=self.gene_extinction(X)
 
     # Sort the programs list by fitness
     programs.sort(key=lambda x: x.fitness_, reverse=self.minimize)
@@ -491,7 +514,7 @@ class GeneticFeatureEngineer(TransformerMixin):
     #codex_strs = [str(program) for program in self.codex_programs]
     #program_strs = [str(program) for program in programs]
 
-    return self.codex_programs
+    return self.codex_programs,X
 
   def init_p_mutations(self,p_mutation: float=0.03):
 
@@ -504,13 +527,39 @@ class GeneticFeatureEngineer(TransformerMixin):
     self.p_point=self.p_mutation/3
     self.p_crossover=1-self.p_mutation
 
+  def prune(self,program, X, y):
+    counter = 0
+    removed_parts = []  # List to store removed parts
+
+    while len(program.program) > 1:
+
+        orig_fitness = program.metric(program.execute(X), y.flatten(), [1] * len(X))
+
+        # Remove the first part
+        removed_part = program.program[0]
+
+        removed_parts.append(removed_part)
+        _,program.program = GeneticFeatureEngineer.remove_from_list(program.program, 0)
+
+        new_fitness = program.metric(program.execute(X), y.flatten(), np.array([1] * len(X)))
+
+        if new_fitness < orig_fitness:
+            break
+        counter += 1
+
+    # Restore removed parts if counter > 0
+    if counter > 0:
+        return program
+
+    for removed_part in removed_parts:
+        program.program.insert(0, removed_part)
+
+    return program
+
   def encode_gene(self,program):
 
     str_program=[x.name if not isinstance(x,int) else x for x in program]
-
-    return np.array([self.mapper[decoding] for decoding in str_program])
-
-  import numpy as np
+    return np.array([self.mapper[decoding] if isinstance(decoding,str) else decoding for decoding in str_program])
 
   def pareto_front_fitness(self,objs):
     n_objectives = len(objs[0].pareto_fitnesses)
@@ -550,7 +599,7 @@ class GeneticFeatureEngineer(TransformerMixin):
   def gene_assignments(self, programs):
 
     encoded_genes = self.encode_genes(programs)
-    operation_encodings = [self.mapper[x] for x in self.mapper if isinstance(x, str)]
+    operation_encodings = [self.mapper[x] if isinstance(x,str) else x for x in self.mapper]
     encoded_genes[~np.isin(encoded_genes, operation_encodings)] = -999
     fitnesses=np.array([gx.fitness_ for gx in programs])
 
@@ -573,35 +622,60 @@ class GeneticFeatureEngineer(TransformerMixin):
     gene_scores = pd.DataFrame({'fitness': repeated.ravel(), 'gene': encoded_genes.ravel()}).groupby('gene').mean()['fitness']
     gene_counts = pd.Series(encoded_genes.reshape(-1)).value_counts()
 
-    gene_scores.index = [self.reverse_mapper[x] for x in gene_scores.index]
-    gene_counts.index = [self.reverse_mapper[x] for x in gene_counts.index]
+    gene_scores.index = [self.reverse_mapper[x]  if x in self.reverse_mapper else self.mapper[x] for x in gene_scores.index]
+    gene_counts.index = [self.reverse_mapper[x]  if x in self.reverse_mapper else self.mapper[x] for x in gene_counts.index]
 
     self.engineer.run_details_['gene_scores'] = gene_scores
     self.engineer.run_details_['gene_counts'] = gene_counts
 
     return list(programs)
 
-  def gene_extinction(self):
+  def gene_extinction(self,X):  #######
+    
     purge_lst=[]
     if self.extinction_counter == self.n_stagnation:
 
         gene_counts = self.engineer.run_details_['gene_counts']
-        purge_idx = gene_counts.drop(-999).argmax()
 
-        if self.str_operations[purge_idx] != 'impostor_operation':
-            if purge_idx < len(self.operations):
-              
-                print(f'purging {self.str_operations[purge_idx]}')    ###########CHANGE#############
-                purge_lst.append(self.str_operations[purge_idx])
-                del self.operations[purge_idx]
-                del self.str_operations[purge_idx]
+        purge_idx = gene_counts.drop(-999).idxmax()
+        purge_lst.append(purge_idx)
 
-            else:
-                # index is out of bounds, do nothing
-                pass
+        if isinstance(purge_idx,str):
+
+          print(f'purging operation {purge_idx}')
+          self.operations = [item for item in self.operations if
+            (isinstance(item, str) and item != purge_idx) or
+            (not isinstance(item, str) and item.name != purge_idx)]
+
+        if self.feat_idxs is not None: 
+            idxs=[x for x in gene_counts.index if x not in gfe.str_operations or x==-999]
+            purge_idx=gene_counts[idxs].drop(-999).idxmax()
+            print(f'purging feature "{purge_idx}"') 
+
+         
+
+           
+            self.feat_idxs.pop(purge_idx)
+            
+            X=np.take(X, list(self.feat_idxs.values()), axis=1)
+
+            self.feat_idxs=OrderedDict({x:y for y,x in enumerate(self.feat_idxs)})
+
+           
+
+            self.feat_names.remove(purge_idx)
+          
+
+            self.reverse_feat_idxs={y:x for x,y in self.feat_idxs.items()}
+
+            for key in self.reverse_feat_idxs:
+              self.mapper[key]=self.reverse_feat_idxs[key]
+              self.reverse_mapper[self.reverse_feat_idxs[key]]=key
 
         self.extinction_counter = 0
     self.engineer.run_details_['purged_genes']=purge_lst
+
+    return X
 
   def calc_diversity(self,X):
     self.encoded_genes = self.encode_genes(self.codex_programs)
@@ -617,7 +691,6 @@ class GeneticFeatureEngineer(TransformerMixin):
     return self.superficiality*g_diversity+p_diversity
 
   def fitness_importances(self,program_lst):
-
     fitnesses = np.array([fx.fitness_ for fx in program_lst])
     indexer = np.argsort(fitnesses)
     imps = pd.DataFrame({'fitnesses': fitnesses[indexer]}, index=[str(program_lst[i]) for i in indexer])
@@ -631,7 +704,7 @@ class GeneticFeatureEngineer(TransformerMixin):
 
   def define_mapper(self, X):
     n_features = X.shape[-1]
-    self.mapper = {x: x for x in range(n_features)}
+    self.mapper = {x:y for x,y in enumerate(self.feat_names)}
     self.mapper[-999]=-999
     self.str_operations = [x if isinstance(x,str) else x.name for x in self.operations]
     for i, operation in enumerate(self.str_operations, start=n_features):
@@ -679,6 +752,9 @@ class GeneticFeatureEngineer(TransformerMixin):
     assert not self.pickled, 'saved model only for transformation'
     X = check_array(X)
     y = check_array(y)
+    if self.feat_idxs is not None:
+      self.feat_idxs={str(x):x for x in range(X.shape[-1])} if not self.feat_names else {x:y for y,x in enumerate(self.feat_names)}
+      self.feat_idxs=OrderedDict(self.feat_idxs)
     self.era = 0
     self.fitted = False
     #self.codex = pd.DataFrame(X.copy()) if self.codex.empty else self.codex
@@ -690,21 +766,26 @@ class GeneticFeatureEngineer(TransformerMixin):
         self.reverse_mapper[-1] = 'impostor_operation'
         self.str_operations.append('impostor_operation')
 
-    codex_programs = self.fit_update(X, y)
+    codex_programs,X = self.fit_update(X, y)
     if self.adaptive:
         max_participants = self.n_population
         self.diversity_lst = [self.calc_diversity(X)]
     self.archive()
     for era in range(self.n_eras - 1):
+      
+      if len(self.operations)>0 and X.shape[-1]>0:
         self.init_model()
         self.era += 1
-        programs_lst = self.fit_update(X, y, era)
+        programs_lst,X = self.fit_update(X, y, era)
         if self.adaptive:
             self.diversity_lst.append(self.calc_diversity(X))
             self.p_mutation = 1 - self.diversity_lst[-1] / np.max(self.diversity_lst)
             self.n_participants = round(self.diversity_lst[-1] / np.max(self.diversity_lst) * max_participants)
             self.init_p_mutations(None)
         self.archive()
+      else:
+        print(f'Genes are extinct. Ending on era {self.era}')
+        break
     self.fitness_importances(np.array(self.codex_programs))
     self.fitted = True
     return self
@@ -774,7 +855,7 @@ class GeneticFeatureEngineer(TransformerMixin):
     assert self.fitted, 'engineer needs to be fitted'
 
     return self.leaderboard
-
+      
 class GeneticFeatureSelector(TransformerMixin):
 
   def __init__(self,n_population: int=100,n_generations: int=30,n_tournament: int=100,n_parents: int=None,mutation_type: str='random',
