@@ -590,7 +590,7 @@ class GeneticFeatureEngineer(TransformerMixin):
 
   def encode_genes(self,programs):
 
-    unpadded_genes=np.array(list({str(self.encode_gene(x.program))+str(y): self.encode_gene(x.program) for y,x in enumerate(programs)}.values()))
+    unpadded_genes=list({str(self.encode_gene(x.program))+str(y): self.encode_gene(x.program) for y,x in enumerate(programs)}.values())
     max_length = max([len(row) for row in unpadded_genes])
     encoded_genes = np.array([np.pad(row, (0, max_length-len(row)),constant_values=-999) for row in unpadded_genes])
 
